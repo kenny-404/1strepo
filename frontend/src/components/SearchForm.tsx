@@ -37,7 +37,7 @@ export default function SearchForm({ onSearch, loading }: Props) {
   const today = new Date().toISOString().split('T')[0]
 
   const [params, setParams] = useState<SearchParams>({
-    make: '', model: '', zip_code: '90210',
+    make: '', model: '', zip_code: '76226',
     max_price: '', max_distance: '100', stock_type: 'used',
     max_results: '100',
     date_filter: 'any', days_listed: '7', date_from: '', date_to: today,
@@ -74,7 +74,7 @@ export default function SearchForm({ onSearch, loading }: Props) {
         </div>
         <div>
           <label className={labelCls}>Zip Code</label>
-          <input value={params.zip_code} onChange={set('zip_code')} placeholder="90210" className={inputCls} maxLength={5} />
+          <input value={params.zip_code} onChange={set('zip_code')} placeholder="76226" className={inputCls} maxLength={5} />
         </div>
         <div>
           <label className={labelCls}>Max Price</label>
