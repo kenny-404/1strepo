@@ -18,6 +18,8 @@ function buildExcel(listings: Listing[]) {
     Condition:       c.condition,
     Price:           c.price,
     Deal:            c.deal_badge,
+    Listed_Date:     c.listed_date,
+    Days_On_Market:  c.days_on_market,
     Mileage:         c.mileage,
     Body:            c.body,
     Fuel:            c.fuel,
