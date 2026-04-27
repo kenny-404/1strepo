@@ -51,22 +51,31 @@ export default function App() {
 
   function exportExcel() {
     if (!results?.listings.length) return
-    const rows = results.listings.map(c => ({
-      Year: c.year,
-      Make: c.make,
-      Model: c.model,
-      Trim: c.trim,
-      Title: c.title,
-      Price: c.price,
-      Mileage: c.mileage,
-      Body: c.body,
-      Fuel: c.fuel,
-      Transmission: c.transmission,
-      VIN: c.vin,
-      Dealer: c.dealer,
-      Distance: c.distance,
-      Rating: c.rating,
-      URL: c.url,
+    const rows = results.listings.map((c: any) => ({
+      Year:           c.year,
+      Make:           c.make,
+      Model:          c.model,
+      Trim:           c.trim,
+      Title:          c.title,
+      Condition:      c.condition,
+      Price:          c.price,
+      Deal:           c.deal_badge,
+      Mileage:        c.mileage,
+      Body:           c.body,
+      Fuel:           c.fuel,
+      Transmission:   c.transmission,
+      Drivetrain:     c.drivetrain,
+      MPG:            c.mpg,
+      Engine:         c.engine,
+      VIN:            c.vin,
+      Days_On_Market: c.days_on_market,
+      URL:            c.url,
+      Dealer:         c.dealer,
+      Dealer_City:    c.dealer_city,
+      Dealer_Phone:   c.dealer_phone,
+      Dealer_Rating:  c.dealer_rating,
+      Dealer_Reviews: c.dealer_reviews,
+      Distance:       c.distance,
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
 
