@@ -8,16 +8,13 @@ RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
-# ── Stage 2: Python + Playwright backend ────────────────────────────────────
-FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy
+# ── Stage 2: Python + Apify backend ─────────────────────────────────────────
+FROM python:3.12-slim
 
 WORKDIR /app
 
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Chromium browser for Playwright
-RUN playwright install chromium
 
 COPY backend/ .
 

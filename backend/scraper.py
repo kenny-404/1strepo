@@ -1,9 +1,9 @@
-from bs4 import BeautifulSoup
-from typing import Optional
-from playwright.sync_api import sync_playwright
+import os
 import re
+from apify_client import ApifyClient
 
 BASE_URL = "https://www.cars.com/shopping/results/"
+ACTOR_ID = "glasswing/cars-scraper"
 
 
 def build_url(
@@ -30,10 +30,28 @@ def build_url(
     return f"{BASE_URL}?{query}"
 
 
-def _clean(text: Optional[str]) -> str:
-    if not text:
+def _str(val) -> str:
+    if val is None:
         return ""
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+", " ", str(val)).strip()
+
+
+def _price(val) -> str:
+    if not val:
+        return "N/A"
+    try:
+        return f"${int(val):,}"
+    except (ValueError, TypeError):
+        return _str(val)
+
+
+def _mileage(val) -> str:
+    if not val:
+        return "N/A"
+    try:
+        return f"{int(val):,} mi"
+    except (ValueError, TypeError):
+        return _str(val)
 
 
 def scrape_listings(
@@ -45,92 +63,62 @@ def scrape_listings(
     stock_type: str = "used",
     page: int = 1,
 ) -> dict:
+    api_token = os.environ.get("APIFY_API_TOKEN", "")
+    if not api_token:
+        return {
+            "error": "APIFY_API_TOKEN environment variable is not set.",
+            "listings": [], "total": 0, "url": "",
+        }
+
     url = build_url(make, model, zip_code, max_price, max_distance, stock_type, page)
 
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu",
-                ],
-            )
-            context = browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1280, "height": 800},
-                locale="en-US",
-            )
-            page_obj = context.new_page()
+        client = ApifyClient(api_token)
+        run = client.actor(ACTOR_ID).call(
+            run_input={
+                "startUrls": [{"url": url}],
+                "maxItemsPerLink": 20,
+                "maxItemsTotal": 20,
+            }
+        )
 
-            # Block images/fonts to speed up load
-            page_obj.route(
-                "**/*.{png,jpg,jpeg,gif,webp,woff,woff2,ttf,otf}",
-                lambda route: route.abort(),
-            )
-
-            page_obj.goto(url, wait_until="domcontentloaded", timeout=30000)
-            # Wait for listing cards to appear
-            try:
-                page_obj.wait_for_selector("div.vehicle-card", timeout=15000)
-            except Exception:
-                pass  # Parse whatever loaded
-
-            html = page_obj.content()
-            browser.close()
-
+        items = list(
+            client.dataset(run["defaultDatasetId"]).iterate_items()
+        )
     except Exception as e:
         return {"error": str(e), "listings": [], "total": 0, "url": url}
 
-    soup = BeautifulSoup(html, "lxml")
-    cars = []
+    listings = []
+    for item in items:
+        # glasswing/cars-scraper output field mapping
+        title = _str(item.get("title") or f"{item.get('year','')} {item.get('make','')} {item.get('model','')}".strip())
 
-    for card in soup.select("div.vehicle-card"):
-        title_el    = card.select_one("h2.title")
-        price_el    = card.select_one("span.primary-price")
-        mileage_el  = card.select_one("div.mileage")
-        dealer_el   = card.select_one("div.dealer-name")
-        location_el = card.select_one("div.miles-from")
-        img_el      = card.select_one("img.vehicle-image")
-        link_el     = card.select_one("a.vehicle-card-link")
-        rating_el   = card.select_one("span.sds-rating__count")
+        images = item.get("images") or item.get("media") or []
+        image = images[0] if isinstance(images, list) and images else _str(item.get("image", ""))
 
         listing = {
-            "title":    _clean(title_el.text)    if title_el    else "N/A",
-            "price":    _clean(price_el.text)    if price_el    else "N/A",
-            "mileage":  _clean(mileage_el.text)  if mileage_el  else "N/A",
-            "dealer":   _clean(dealer_el.text)   if dealer_el   else "N/A",
-            "distance": _clean(location_el.text) if location_el else "",
-            "rating":   _clean(rating_el.text)   if rating_el   else "",
-            "image":    img_el.get("src", "")    if img_el      else "",
-            "url":      "https://www.cars.com" + link_el.get("href", "") if link_el else "",
+            "title":    title or "N/A",
+            "price":    _price(item.get("price") or item.get("listing_price")),
+            "mileage":  _mileage(item.get("mileage") or item.get("miles")),
+            "dealer":   _str(item.get("dealer") or item.get("dealer_name") or item.get("sellerName", "")),
+            "distance": _str(item.get("distance") or item.get("miles_from_zip", "")),
+            "rating":   _str(item.get("dealer_rating") or item.get("rating", "")),
+            "image":    image,
+            "url":      _str(item.get("url") or item.get("listing_url") or item.get("link", "")),
+            "year":     _str(item.get("year", "")),
+            "make":     _str(item.get("make", make)),
+            "model":    _str(item.get("model", model)),
+            "vin":      _str(item.get("vin", "")),
+            "trim":     _str(item.get("trim", "")),
+            "body":     _str(item.get("body_type") or item.get("bodyType", "")),
+            "fuel":     _str(item.get("fuel_type") or item.get("fuelType", "")),
+            "transmission": _str(item.get("transmission", "")),
         }
-
-        match = re.match(r"^(\d{4})\s+(\w+)\s+(.+)$", listing["title"])
-        if match:
-            listing["year"]  = match.group(1)
-            listing["make"]  = match.group(2)
-            listing["model"] = match.group(3)
-        else:
-            listing["year"]  = ""
-            listing["make"]  = make
-            listing["model"] = model
-
-        cars.append(listing)
-
-    total_el   = soup.select_one("span.total-filter-count, [data-total-count]")
-    total_text = _clean(total_el.text) if total_el else "0"
-    total_num  = int(re.sub(r"[^\d]", "", total_text) or 0)
+        listings.append(listing)
 
     return {
-        "listings": cars,
-        "total":    total_num,
+        "listings": listings,
+        "total":    len(listings),
         "page":     page,
         "url":      url,
         "error":    None,
