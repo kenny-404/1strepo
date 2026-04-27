@@ -2,7 +2,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from scraper import scrape_listings
+from scraper import scrape_listings, scrape_raw
 import os
 
 app = FastAPI(title="Cars.com Scraper API")
@@ -34,6 +34,15 @@ def search(
         stock_type=stock_type,
         page=page,
     )
+
+
+@app.get("/api/raw")
+def raw(
+    make: str = Query(default="Toyota"),
+    zip_code: str = Query(default="90210"),
+):
+    """Returns first raw Apify item — use to inspect real field names."""
+    return scrape_raw(make=make, zip_code=zip_code)
 
 
 @app.get("/api/makes")

@@ -52,9 +52,17 @@ export default function App() {
   function exportExcel() {
     if (!results?.listings.length) return
     const rows = results.listings.map(c => ({
+      Year: c.year,
+      Make: c.make,
+      Model: c.model,
+      Trim: c.trim,
       Title: c.title,
       Price: c.price,
       Mileage: c.mileage,
+      Body: c.body,
+      Fuel: c.fuel,
+      Transmission: c.transmission,
+      VIN: c.vin,
       Dealer: c.dealer,
       Distance: c.distance,
       Rating: c.rating,
