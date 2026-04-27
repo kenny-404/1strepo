@@ -24,6 +24,7 @@ def search(
     max_distance: str = Query(default="100"),
     stock_type: str = Query(default="used"),
     page: int = Query(default=1, ge=1),
+    max_results: int = Query(default=100, ge=1, le=500),
 ):
     return scrape_listings(
         make=make,
@@ -33,6 +34,7 @@ def search(
         max_distance=max_distance,
         stock_type=stock_type,
         page=page,
+        max_results=max_results,
     )
 
 

@@ -60,7 +60,7 @@ export default function App() {
     setSummary(null)
     setErrorMsg('')
     try {
-      const q = new URLSearchParams({ ...params, page: '1' } as Record<string, string>)
+      const q = new URLSearchParams({ ...params, page: '1', max_results: params.max_results } as Record<string, string>)
       const res = await fetch(`${API}/api/search?${q}`)
       const data: Result = await res.json()
 

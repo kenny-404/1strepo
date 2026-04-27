@@ -85,14 +85,18 @@ def _map_item(item: dict) -> dict:
     }
 
 
-def _run_actor(url: str) -> tuple[list[dict], str | None]:
+def _run_actor(url: str, max_results: int = 100) -> tuple[list[dict], str | None]:
     api_token = os.environ.get("APIFY_API_TOKEN", "")
     if not api_token:
         return [], "APIFY_API_TOKEN environment variable is not set."
     try:
         client = ApifyClient(api_token)
         run = client.actor(ACTOR_ID).call(
-            run_input={"startUrls": [{"url": url}], "maxItemsPerLink": 20, "maxItemsTotal": 20}
+            run_input={
+                "startUrls": [{"url": url}],
+                "maxItemsPerLink": max_results,
+                "maxItemsTotal": max_results,
+            }
         )
         items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
         return items, None
@@ -114,9 +118,10 @@ def scrape_listings(
     max_distance: str = "100",
     stock_type: str = "used",
     page: int = 1,
+    max_results: int = 100,
 ) -> dict:
     url = build_url(make, model, zip_code, max_price, max_distance, stock_type, page)
-    items, err = _run_actor(url)
+    items, err = _run_actor(url, max_results)
     if err:
         return {"error": err, "listings": [], "total": 0, "url": url}
 

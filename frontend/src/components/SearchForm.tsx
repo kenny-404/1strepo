@@ -9,6 +9,7 @@ const MAKES = [
 
 const DISTANCES = ['25', '50', '100', '200', '500', 'all']
 const PRICES = ['10000', '15000', '20000', '25000', '30000', '40000', '50000', '75000', '100000']
+const MAX_RESULTS = ['20', '50', '100', '200', '500']
 
 export type SearchParams = {
   make: string
@@ -17,6 +18,7 @@ export type SearchParams = {
   max_price: string
   max_distance: string
   stock_type: string
+  max_results: string
 }
 
 type Props = { onSearch: (p: SearchParams) => void; loading: boolean }
@@ -24,7 +26,7 @@ type Props = { onSearch: (p: SearchParams) => void; loading: boolean }
 export default function SearchForm({ onSearch, loading }: Props) {
   const [params, setParams] = useState<SearchParams>({
     make: '', model: '', zip_code: '90210',
-    max_price: '', max_distance: '100', stock_type: 'used',
+    max_price: '', max_distance: '100', stock_type: 'used', max_results: '100',
   })
 
   const set = (key: keyof SearchParams) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -53,14 +55,12 @@ export default function SearchForm({ onSearch, loading }: Props) {
 
         <div>
           <label className={labelCls}>Model</label>
-          <input value={params.model} onChange={set('model')} placeholder="e.g. Camry"
-            className={inputCls} />
+          <input value={params.model} onChange={set('model')} placeholder="e.g. Camry" className={inputCls} />
         </div>
 
         <div>
           <label className={labelCls}>Zip Code</label>
-          <input value={params.zip_code} onChange={set('zip_code')} placeholder="90210"
-            className={inputCls} maxLength={5} />
+          <input value={params.zip_code} onChange={set('zip_code')} placeholder="90210" className={inputCls} maxLength={5} />
         </div>
 
         <div>
@@ -89,6 +89,15 @@ export default function SearchForm({ onSearch, loading }: Props) {
             <option value="new">New</option>
             <option value="all">All</option>
             <option value="certified">Certified</option>
+          </select>
+        </div>
+
+        <div>
+          <label className={labelCls}>Max Results</label>
+          <select value={params.max_results} onChange={set('max_results')} className={inputCls}>
+            {MAX_RESULTS.map(n => (
+              <option key={n} value={n}>{n} listings</option>
+            ))}
           </select>
         </div>
       </div>
