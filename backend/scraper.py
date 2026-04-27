@@ -2,6 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 from typing import Optional
 import re
+import time
+import random
 
 HEADERS = {
     "User-Agent": (
@@ -9,7 +11,16 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
 }
 
 BASE_URL = "https://www.cars.com/shopping/results/"
@@ -24,16 +35,18 @@ def build_url(
     stock_type: str = "used",
     page: int = 1,
 ) -> str:
-    params = {
-        "stock_type": stock_type,
-        "makes[]": make.lower(),
-        "models[]": f"{make.lower()}-{model.lower()}" if model else "",
-        "list_price_max": max_price,
-        "maximum_distance": max_distance,
-        "zip": zip_code,
-        "page": page,
-    }
-    query = "&".join(f"{k}={v}" for k, v in params.items() if v)
+    params: dict[str, str] = {"stock_type": stock_type}
+    if make:
+        params["makes[]"] = make.lower()
+    if model:
+        params["models[]"] = f"{make.lower()}-{model.lower()}"
+    if max_price:
+        params["list_price_max"] = max_price
+    params["maximum_distance"] = max_distance
+    params["zip"] = zip_code
+    if page > 1:
+        params["page"] = str(page)
+    query = "&".join(f"{k}={v}" for k, v in params.items())
     return f"{BASE_URL}?{query}"
 
 
@@ -41,6 +54,20 @@ def _clean(text: Optional[str]) -> str:
     if not text:
         return ""
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _make_session() -> requests.Session:
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    # Warm up: hit homepage first to get cookies
+    try:
+        session.get("https://www.cars.com/", timeout=15)
+        time.sleep(random.uniform(0.8, 1.5))
+    except Exception:
+        pass
+
+    return session
 
 
 def scrape_listings(
@@ -53,67 +80,72 @@ def scrape_listings(
     page: int = 1,
 ) -> dict:
     url = build_url(make, model, zip_code, max_price, max_distance, stock_type, page)
+    session = _make_session()
 
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = session.get(
+            url,
+            timeout=20,
+            headers={
+                **HEADERS,
+                "Referer": "https://www.cars.com/",
+                "Sec-Fetch-Site": "same-origin",
+            },
+        )
         resp.raise_for_status()
+    except requests.HTTPError as e:
+        return {
+            "error": f"Cars.com blocked the request ({e.response.status_code}). "
+                     "Try different filters or wait a moment.",
+            "listings": [], "total": 0, "url": url,
+        }
     except requests.RequestException as e:
         return {"error": str(e), "listings": [], "total": 0, "url": url}
 
     soup = BeautifulSoup(resp.text, "lxml")
     cars = []
 
-    # Each listing card
     for card in soup.select("div.vehicle-card"):
-        title_el = card.select_one("h2.title")
-        price_el = card.select_one("span.primary-price")
+        title_el   = card.select_one("h2.title")
+        price_el   = card.select_one("span.primary-price")
         mileage_el = card.select_one("div.mileage")
-        dealer_el = card.select_one("div.dealer-name")
-        location_el = card.select_one("div.miles-from")
-        img_el = card.select_one("img.vehicle-image")
-        link_el = card.select_one("a.vehicle-card-link")
-        rating_el = card.select_one("span.sds-rating__count")
-        badge_el = card.select_one("div.vehicle-badge-dealer-rating")
+        dealer_el  = card.select_one("div.dealer-name")
+        location_el= card.select_one("div.miles-from")
+        img_el     = card.select_one("img.vehicle-image")
+        link_el    = card.select_one("a.vehicle-card-link")
+        rating_el  = card.select_one("span.sds-rating__count")
 
-        # Extract details rows (mileage, color, etc.)
-        details = {}
-        for row in card.select("dl.vehicle-details dt, dl.vehicle-details dd"):
-            pass  # built differently on cars.com
-
-        # Build listing dict
         listing = {
-            "title": _clean(title_el.text) if title_el else "N/A",
-            "price": _clean(price_el.text) if price_el else "N/A",
-            "mileage": _clean(mileage_el.text) if mileage_el else "N/A",
-            "dealer": _clean(dealer_el.text) if dealer_el else "N/A",
+            "title":    _clean(title_el.text)    if title_el    else "N/A",
+            "price":    _clean(price_el.text)    if price_el    else "N/A",
+            "mileage":  _clean(mileage_el.text)  if mileage_el  else "N/A",
+            "dealer":   _clean(dealer_el.text)   if dealer_el   else "N/A",
             "distance": _clean(location_el.text) if location_el else "",
-            "rating": _clean(rating_el.text) if rating_el else "",
-            "image": img_el.get("src", "") if img_el else "",
-            "url": "https://www.cars.com" + link_el.get("href", "") if link_el else "",
+            "rating":   _clean(rating_el.text)   if rating_el   else "",
+            "image":    img_el.get("src", "")    if img_el      else "",
+            "url":      "https://www.cars.com" + link_el.get("href", "") if link_el else "",
         }
 
-        # Try to extract year/make/model from title
         match = re.match(r"^(\d{4})\s+(\w+)\s+(.+)$", listing["title"])
         if match:
-            listing["year"] = match.group(1)
-            listing["make"] = match.group(2)
+            listing["year"]  = match.group(1)
+            listing["make"]  = match.group(2)
             listing["model"] = match.group(3)
         else:
-            listing["year"] = ""
-            listing["make"] = make
+            listing["year"]  = ""
+            listing["make"]  = make
             listing["model"] = model
 
         cars.append(listing)
 
-    # Total count
-    total_el = soup.select_one("span.total-filter-count, .total-found, [data-total-count]")
+    total_el   = soup.select_one("span.total-filter-count, [data-total-count]")
     total_text = _clean(total_el.text) if total_el else "0"
-    total_num = int(re.sub(r"[^\d]", "", total_text) or 0)
+    total_num  = int(re.sub(r"[^\d]", "", total_text) or 0)
 
     return {
         "listings": cars,
-        "total": total_num,
-        "page": page,
-        "url": url,
-        "error": None,
+        "total":    total_num,
+        "page":     page,
+        "url":      url,
+        "error":    None,
     }
