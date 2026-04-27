@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: cars-scraper
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /api/makes
+    envVars:
+      - key: PORT
+        value: 10000
