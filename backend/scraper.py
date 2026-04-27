@@ -1,5 +1,6 @@
 import os
 import re
+from datetime import datetime, timedelta
 from apify_client import ApifyClient
 
 BASE_URL = "https://www.cars.com/shopping/results/"
@@ -111,6 +112,47 @@ def scrape_raw(make: str = "Toyota", zip_code: str = "90210") -> dict:
     return {"raw": items[0] if items else {}, "error": err, "url": url}
 
 
+def _parse_listed_date(raw: str) -> datetime | None:
+    """Parse listedDate formats like '04/18/26' or '04/18/2026'."""
+    for fmt in ("%m/%d/%y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(raw.strip(), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _filter_by_date(
+    listings: list[dict],
+    date_filter: str,
+    days_listed: int,
+    date_from: str,
+    date_to: str,
+) -> list[dict]:
+    if date_filter == "any":
+        return listings
+
+    if date_filter == "within":
+        cutoff = datetime.now() - timedelta(days=days_listed)
+        return [
+            l for l in listings
+            if (d := _parse_listed_date(l.get("listed_date", ""))) and d >= cutoff
+        ]
+
+    if date_filter == "between" and date_from:
+        try:
+            dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+            dt_to   = datetime.strptime(date_to, "%Y-%m-%d") if date_to else datetime.now()
+        except ValueError:
+            return listings
+        return [
+            l for l in listings
+            if (d := _parse_listed_date(l.get("listed_date", ""))) and dt_from <= d <= dt_to
+        ]
+
+    return listings
+
+
 def scrape_listings(
     make: str = "",
     model: str = "",
@@ -120,6 +162,10 @@ def scrape_listings(
     stock_type: str = "used",
     page: int = 1,
     max_results: int = 100,
+    date_filter: str = "any",
+    days_listed: int = 7,
+    date_from: str = "",
+    date_to: str = "",
 ) -> dict:
     url = build_url(make, model, zip_code, max_price, max_distance, stock_type, page)
     items, err = _run_actor(url, max_results)
@@ -127,4 +173,5 @@ def scrape_listings(
         return {"error": err, "listings": [], "total": 0, "url": url}
 
     listings = [_map_item(item) for item in items]
+    listings = _filter_by_date(listings, date_filter, days_listed, date_from, date_to)
     return {"listings": listings, "total": len(listings), "page": page, "url": url, "error": None}
