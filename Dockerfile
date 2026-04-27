@@ -12,9 +12,17 @@ RUN npm run build
 # ── Stage 2: Serve with nginx ────────────────────────────────────────────────
 FROM nginx:stable-alpine
 
+# envsubst is needed to inject $PORT at runtime
+RUN apk add --no-cache gettext
+
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Store as template; entrypoint will substitute $PORT
+COPY nginx.conf /etc/nginx/conf.d/default.conf.template
+
+# Default port for local Docker runs
+ENV PORT=80
 
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+# Substitute PORT into nginx config then start
+CMD sh -c "envsubst '\$PORT' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
